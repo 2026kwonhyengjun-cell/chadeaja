@@ -1,0 +1,539 @@
+<!doctype html>
+<html lang="ko">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no" />
+    <title>차대자 - 상습 불법주차 지도 &amp; 대안주차 솔루션</title>
+    <meta
+      name="description"
+      content="지역 사회 불법주차 문제 해결을 위한 소셜 임팩트 앱: 상습 불법주차 다발구역 데이터 지도와 안심 대안 주차장 실시간 길안내"
+    />
+    <meta property="og:title" content="차대자 - 상습 불법주차 지도 &amp; 대안주차 솔루션" />
+    <meta
+      property="og:description"
+      content="지역 사회 불법주차 문제 해결을 위한 소셜 임팩트 앱: 상습 불법주차 다발구역 데이터 지도와 안심 대안 주차장 실시간 길안내"
+    />
+    <meta property="og:type" content="website" />
+    <meta name="twitter:card" content="summary_large_image" />
+
+    <!-- 폰트 및 지도 라이브러리 (CDN) -->
+    <link rel="preconnect" href="https://cdn.jsdelivr.net" />
+    <link
+      rel="stylesheet"
+      as="style"
+      crossorigin
+      href="https://cdn.jsdelivr.net/gh/orioncactus/pretendard@v1.3.9/dist/web/static/pretendard.min.css"
+    />
+    <link
+      rel="stylesheet"
+      href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css"
+      crossorigin=""
+    />
+    <script
+      src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"
+      crossorigin=""
+      defer
+    ></script>
+
+    <!-- 상대 경로(./) 정적 CSS 및 바닐라 JS -->
+    <link rel="stylesheet" href="./styles.css" />
+    <script src="./data.js" defer></script>
+    <script src="./app.js" defer></script>
+  </head>
+  <body>
+    <!-- 상단 네비게이션 -->
+    <header class="navbar">
+      <div class="container navbar-inner">
+        <div class="brand">
+          <div class="brand-logo-wrap">
+            <div class="brand-logo-inner">🚗</div>
+          </div>
+          <div>
+            <div class="brand-title-row">
+              <span class="brand-title">차대자</span>
+              <span class="brand-badge">소셜 임팩트</span>
+            </div>
+            <p class="brand-subtitle">상습 불법주차 지도 &amp; 안심 대안주차 솔루션</p>
+          </div>
+        </div>
+
+        <div class="nav-controls">
+          <div class="district-picker">
+            <span class="district-picker-icon">📍</span>
+            <select id="districtSelect" class="district-select" aria-label="지역 선택"></select>
+          </div>
+          <button type="button" id="locateBtn" class="btn-nav btn-locate" title="내 현재 GPS 위치로 이동">
+            <span id="locateDot" class="dot-live"></span>
+            <span id="locateText">내 주변</span>
+          </button>
+        </div>
+
+        <div class="nav-actions">
+          <button type="button" data-open-safety class="btn-nav btn-safety">
+            <span>⚠️ 5대 금지구역 기준</span>
+          </button>
+          <button type="button" data-open-impact class="btn-nav btn-impact">
+            <span>🤝 개발자 성찰 &amp; 임팩트</span>
+          </button>
+          <button type="button" data-open-report class="btn-nav btn-report">
+            <span>＋ 현장 제보</span>
+          </button>
+        </div>
+      </div>
+    </header>
+
+    <!-- 소셜 임팩트 안내 배너 -->
+    <section class="impact-banner">
+      <div class="container impact-banner-inner">
+        <div class="banner-info">
+          <span class="banner-icon">✨</span>
+          <div>
+            <p class="banner-title">
+              <span id="bannerDistrictName" class="banner-district"></span>
+              <span id="bannerDistrictDesc"></span>
+            </p>
+            <p class="banner-sub">
+              단속과 과태료 이전에, <strong>2~5분 거리의 합법적 대안 주차 공간</strong>을 먼저 찾아 스트레스를 줄입니다.
+            </p>
+          </div>
+        </div>
+
+        <div class="banner-metrics">
+          <div class="metric-box">
+            <div class="metric-label">상습 다발구역</div>
+            <div id="metricHotspots" class="metric-value red">0개소</div>
+          </div>
+          <div class="metric-divider"></div>
+          <div class="metric-box">
+            <div class="metric-label">즉시 주차 가능</div>
+            <div id="metricSpots" class="metric-value emerald">0면</div>
+          </div>
+          <div class="metric-divider"></div>
+          <button type="button" data-open-impact class="btn-link-amber">기획의도 보기</button>
+        </div>
+      </div>
+    </section>
+
+    <!-- 뷰 전환 탭 -->
+    <div class="container tab-bar-wrap">
+      <div class="tab-group">
+        <button type="button" class="tab-btn active-dark" data-tab="SPLIT">전체 통합뷰</button>
+        <button type="button" class="tab-btn" data-tab="MAP">지도만 보기</button>
+        <button type="button" class="tab-btn" data-tab="HOTSPOTS">
+          <span class="dot red"></span>
+          상습 불법구역 (<span id="tabCountHotspots">0</span>)
+        </button>
+        <button type="button" class="tab-btn" data-tab="PARKINGS">
+          <span class="dot emerald"></span>
+          대안 주차장 (<span id="tabCountParkings">0</span>)
+        </button>
+      </div>
+
+      <div class="helper-hint">
+        <span><span class="dot red"></span> 상습 지점 클릭 시</span>
+        <span>→</span>
+        <span style="color:#047857;font-weight:700;"><span class="dot emerald"></span> 가장 가까운 대안 주차로 즉시 연결</span>
+      </div>
+    </div>
+
+    <!-- 메인 콘텐츠 -->
+    <main class="container main-content">
+      <div id="mainGrid" class="split-grid">
+        <!-- 좌측: 지도 영역 -->
+        <div id="mapColumn" class="map-column">
+          <div class="map-card">
+            <div class="map-toolbar">
+              <div class="engine-toggle">
+                <button type="button" id="btnEngineGoogle" class="engine-btn active-google">
+                  구글 지도 (임베드)
+                </button>
+                <button type="button" id="btnEngineLeaflet" class="engine-btn">
+                  핀·경로 데이터 지도
+                </button>
+              </div>
+
+              <div id="googleSubControls" class="map-subcontrols">
+                <button type="button" id="btnGoogleSat" class="sub-btn active">위성지도</button>
+                <button type="button" id="btnGoogleRoad" class="sub-btn">일반지도</button>
+                <button type="button" id="btnGoogleReset" class="sub-btn reset-blue hidden">지역 전체 보기</button>
+              </div>
+
+              <div id="leafletSubControls" class="map-subcontrols hidden">
+                <button type="button" class="sub-btn active" data-leaflet-filter="ALL">전체</button>
+                <button type="button" class="sub-btn" data-leaflet-filter="HOTSPOTS_ONLY">
+                  불법구역 (<span id="leafletCountHotspots">0</span>)
+                </button>
+                <button type="button" class="sub-btn" data-leaflet-filter="PARKINGS_ONLY">
+                  대안주차 (<span id="leafletCountParkings">0</span>)
+                </button>
+              </div>
+            </div>
+
+            <div class="map-viewport">
+              <!-- 구글 지도 임베드 -->
+              <div id="googleIframeWrap" style="width:100%;height:100%;">
+                <iframe
+                  id="googleIframe"
+                  class="google-iframe"
+                  src="https://www.google.com/maps/embed?pb=!1m5!3m3!1m2!1s0x3565efed1c4c3489%3A0xc34f7f932bfc6ee3!2z64yA6rWs6rSR7Jet7IucIOuLrOyEseq1sCDri6TsgqzsnY0!5e1!3m2!1sko!2skr!4v1795587749802!5m2!1sko!2skr"
+                  title="구글 지도 임베드"
+                  allowfullscreen
+                  loading="lazy"
+                  referrerpolicy="strict-origin-when-cross-origin"
+                ></iframe>
+                <div class="map-overlay-pill">
+                  <strong style="color:#1d4ed8;">Google 지도 임베드</strong>
+                  <span style="margin:0 4px;color:#cbd5e1;">|</span>
+                  <span id="googleStatusLabel">대구광역시 달성군 다사읍</span>
+                  <button type="button" id="btnSwitchToLeafletInline" class="map-overlay-link">
+                    다중 핀·도보경로 보기 →
+                  </button>
+                </div>
+              </div>
+
+              <!-- Leaflet 핀·경로 지도 -->
+              <div id="leafletWrap" class="hidden" style="width:100%;height:100%;position:relative;">
+                <div class="map-legend">
+                  <div class="legend-item">
+                    <span class="legend-dot" style="background:#dc2626;"></span>
+                    <span>상습 불법주차 다발 (5대 절대금지)</span>
+                  </div>
+                  <div class="legend-item">
+                    <span class="legend-dot" style="background:#059669;"></span>
+                    <span>공영 주차장 (합법/할인)</span>
+                  </div>
+                  <div class="legend-item">
+                    <span class="legend-dot" style="background:#0284c7;"></span>
+                    <span>나눔·야간 무료 개방</span>
+                  </div>
+                </div>
+                <div id="leafletMapBox" class="leaflet-container-box"></div>
+              </div>
+
+              <!-- 선택된 상습구역 플로팅 안내 카드 -->
+              <div id="mapGuidanceCard" class="map-guidance-card hidden"></div>
+            </div>
+          </div>
+        </div>
+
+        <!-- 우측: 핵심 기능 2가지 패널 -->
+        <div id="cardsColumn" class="cards-column">
+          <!-- 기능 1: 상습 불법주차 데이터 지도 리스트 -->
+          <section id="hotspotPanelWrap" class="panel-card">
+            <div class="panel-header">
+              <div>
+                <div class="panel-title-group">
+                  <span class="panel-icon red">⚠️</span>
+                  <h3 class="panel-title">상습 불법주차 다발 데이터 지도</h3>
+                </div>
+                <p class="panel-desc">
+                  소화전, 횡단보도, 스쿨존 등 이웃의 안전과 통행을 위협하는 반복 상습 구역 현황입니다.
+                </p>
+              </div>
+              <div class="panel-header-actions">
+                <button type="button" data-open-safety class="btn-outline-amber">과태료/단속기준</button>
+                <button type="button" data-open-report class="btn-solid-red">+ 새 제보</button>
+              </div>
+            </div>
+
+            <div class="filter-grid">
+              <input
+                type="text"
+                id="hotspotSearchInput"
+                class="input-control"
+                placeholder="구역명, 도로명 검색..."
+              />
+              <select id="hotspotTypeSelect" class="input-control" aria-label="위반 유형 필터">
+                <option value="ALL">위반 유형 전체</option>
+                <option value="FIRE_HYDRANT">소화전 5m 이내</option>
+                <option value="CROSSWALK">횡단보도</option>
+                <option value="SCHOOL_ZONE">어린이보호구역</option>
+                <option value="INTERSECTION_CORNER">교차로 모퉁이</option>
+                <option value="BUS_STOP">버스정류소 10m</option>
+                <option value="DOUBLE_PARKING">이면도로 이중주차</option>
+                <option value="SIDEWALK">보도/인도 침범</option>
+              </select>
+              <select id="hotspotSeveritySelect" class="input-control" aria-label="위험도 필터">
+                <option value="ALL">위험도 전체</option>
+                <option value="CRITICAL">위험도 심각 (즉시 단속·안전 위협)</option>
+                <option value="HIGH">위험도 높음 (상습 통행 방해)</option>
+                <option value="MODERATE">위험도 보통</option>
+              </select>
+            </div>
+
+            <div id="hotspotList" class="scroll-list"></div>
+          </section>
+
+          <!-- 기능 2: 안심 대안 주차장 찾기 -->
+          <section id="parkingPanelWrap" class="panel-card">
+            <div class="panel-header">
+              <div>
+                <div class="panel-title-group">
+                  <span class="panel-icon emerald">🛡️</span>
+                  <h3 class="panel-title">안심 대안 주차장 찾기</h3>
+                </div>
+                <p class="panel-desc">
+                  골목길 불법주차 대신 도보 2~5분 거리의 안전한 공영·나눔 주차장을 안내합니다.
+                </p>
+              </div>
+              <div class="spots-summary-pill">
+                <span class="dot emerald"></span>
+                <span id="totalAvailablePill">총 0면 즉시 주차 가능</span>
+              </div>
+            </div>
+
+            <div class="discount-bar">
+              <span style="font-weight:700;color:#334155;">🏷️ 감면 혜택 계산기:</span>
+              <div class="chip-row">
+                <button type="button" class="chip-btn active-dark" data-car-type="STANDARD">일반 차량</button>
+                <button type="button" class="chip-btn" data-car-type="COMPACT">경차 50%</button>
+                <button type="button" class="chip-btn" data-car-type="ECO">저공해/전기 50%</button>
+                <button type="button" class="chip-btn" data-car-type="MULTI_CHILD">다둥이 50%</button>
+              </div>
+            </div>
+
+            <div class="parking-filter-bar">
+              <div class="chip-row">
+                <button type="button" class="chip-btn active-dark" data-parking-filter="ALL">
+                  전체 (<span id="parkingCountAll">0</span>)
+                </button>
+                <button type="button" class="chip-btn" data-parking-filter="FREE">✨ 야간·주말 무료개방</button>
+                <button type="button" class="chip-btn" data-parking-filter="PUBLIC">공영 주차장</button>
+              </div>
+              <div>
+                <span style="font-size:11px;color:#94a3b8;margin-right:4px;">정렬:</span>
+                <select id="parkingSortSelect" class="sort-select" aria-label="정렬 기준">
+                  <option value="DISTANCE">가까운 순 (거리)</option>
+                  <option value="PRICE">요금 저렴한 순</option>
+                  <option value="SPOTS">여유 잔여석 많은 순</option>
+                </select>
+              </div>
+            </div>
+
+            <div id="parkingList" class="scroll-list"></div>
+          </section>
+        </div>
+      </div>
+    </main>
+
+    <!-- 푸터 -->
+    <footer class="footer">
+      <div class="container footer-inner">
+        <div>
+          <p class="footer-brand">🚗 차대자 (ChaDaeJa) — 이웃을 위한 소셜 임팩트 주차 솔루션</p>
+          <p style="margin-top:4px;">
+            "불법주차는 정보 부재로 인한 구조적 문제입니다. 대안 주차 공간을 먼저 연결합니다."
+          </p>
+        </div>
+        <div class="footer-links">
+          <button type="button" data-open-safety>5대 금지구역 법규 기준</button>
+          <span>·</span>
+          <button type="button" data-open-impact style="color:#34d399;font-weight:700;">개발자 성찰 노트</button>
+        </div>
+      </div>
+    </footer>
+
+    <!-- 모달 1: 현장 제보 -->
+    <div id="reportModal" class="modal-backdrop hidden" role="dialog" aria-modal="true">
+      <div class="modal-box">
+        <button type="button" class="modal-close" data-close-modal="reportModal">✕</button>
+
+        <div id="reportSuccessBox" class="hidden" style="text-align:center;padding:32px 12px;">
+          <div style="font-size:48px;margin-bottom:10px;">✅</div>
+          <h3 class="modal-title">제보가 정상 접수되었습니다!</h3>
+          <p class="modal-sub" style="margin-top:6px;">
+            상습 불법주차 목록에 반영되어 이웃들에게 대안 주차장이 우선 안내됩니다.
+          </p>
+        </div>
+
+        <form id="reportForm">
+          <h3 class="modal-title">🛡️ 상습 불법주차 현장 시민 제보</h3>
+          <p id="reportDistrictLabel" class="modal-sub"></p>
+
+          <div class="safety-card" style="background:#fffbeb;border-color:#fde68a;color:#78350f;margin:14px 0;">
+            <strong>안전신문고 즉시 과태료 부과 팁</strong>
+            <p style="margin-top:4px;font-size:11px;">
+              5대 불법 주정차 금지구역은 1분 간격으로 촬영한 동일 각도 사진 2장이 있으면 공무원 현장 출동 없이 즉시 과태료가 부과됩니다.
+            </p>
+          </div>
+
+          <div class="form-group">
+            <label for="reportViolationType" class="form-label">위반 유형 선택</label>
+            <select id="reportViolationType" class="input-control">
+              <option value="FIRE_HYDRANT">소화전 5m 이내 (5대 절대 주정차 금지)</option>
+              <option value="CROSSWALK">횡단보도 위 및 정지선 (5대 절대 주정차 금지)</option>
+              <option value="SCHOOL_ZONE">어린이보호구역 (스쿨존 3배 가중)</option>
+              <option value="INTERSECTION_CORNER">교차로 모퉁이 5m 이내 (5대 절대 주정차 금지)</option>
+              <option value="BUS_STOP">버스정류소 10m 이내 (5대 절대 주정차 금지)</option>
+              <option value="SIDEWALK">인도·보도 침범</option>
+              <option value="DOUBLE_PARKING">이면도로 이중주차</option>
+              <option value="FIRE_LANE">소방차 전용구역 노면표시</option>
+            </select>
+          </div>
+
+          <div class="form-row-2">
+            <div class="form-group">
+              <label for="reportLocationName" class="form-label">장소 / 건물 명칭</label>
+              <input
+                type="text"
+                id="reportLocationName"
+                class="input-control"
+                required
+                placeholder="예: 대실역 인근 횡단보도 앞"
+              />
+            </div>
+            <div class="form-group">
+              <label for="reportAddress" class="form-label">상세 도로명 주소</label>
+              <input
+                type="text"
+                id="reportAddress"
+                class="input-control"
+                required
+                placeholder="예: 대구 달성군 다사읍 죽곡리"
+              />
+            </div>
+          </div>
+
+          <div class="form-group">
+            <label for="reportDescription" class="form-label">불법주차 현황 설명</label>
+            <textarea
+              id="reportDescription"
+              class="input-control"
+              rows="3"
+              placeholder="예: 매일 저녁 8시경 모퉁이를 막아 우회전 시 반대편 차선이 보이지 않습니다."
+            ></textarea>
+          </div>
+
+          <div class="form-group">
+            <label class="form-label">현장 사진 증거 첨부 (선택)</label>
+            <div style="display:flex;align-items:center;gap:10px;flex-wrap:wrap;">
+              <label
+                for="reportPhotoInput"
+                style="padding:7px 12px;background:#f1f5f9;border:1px solid #cbd5e1;border-radius:10px;font-size:12px;font-weight:600;cursor:pointer;"
+              >
+                📷 사진 등록
+              </label>
+              <input type="file" id="reportPhotoInput" accept="image/*" class="hidden" />
+              <span id="reportPhotoStatus" style="font-size:11px;color:#94a3b8;">
+                차량 번호판과 위반 위치 표지판이 함께 나오면 효과적입니다.
+              </span>
+            </div>
+          </div>
+
+          <div style="display:flex;justify-content:flex-end;gap:8px;padding-top:12px;border-top:1px solid #f1f5f9;">
+            <button type="button" data-close-modal="reportModal" class="sub-btn">취소</button>
+            <button type="submit" class="btn-solid-red" style="padding:9px 18px;">제보 등록하기</button>
+          </div>
+        </form>
+      </div>
+    </div>
+
+    <!-- 모달 2: 개발자 성찰 & 소셜 임팩트 -->
+    <div id="impactModal" class="modal-backdrop hidden" role="dialog" aria-modal="true">
+      <div class="modal-box">
+        <button type="button" class="modal-close" data-close-modal="impactModal">✕</button>
+        <span class="pill-soft emerald">Step 4 최종 기획안</span>
+        <h2 class="modal-title" style="margin-top:6px;">'차대자' 기획 의도와 개발자 성찰</h2>
+
+        <div class="quote-box">
+          <div style="font-size:12px;font-weight:800;color:#92400e;margin-bottom:6px;">
+            ✨ 오늘의 활동 성찰 (개발자의 시선)
+          </div>
+          <p class="quote-text">
+            "불법주차가 단순한 양심 문제를 넘어 <strong>정보 부재로 인한 구조적 문제</strong>임을 깨달았습니다. 앞으로는 화려한 기술보다 실생활의 진짜 불편을 가장 직관적으로 해결하는 개발에 집중하겠습니다."
+          </p>
+        </div>
+
+        <div class="form-row-2">
+          <div class="safety-card" style="background:#fef2f2;border-color:#fecaca;">
+            <strong style="color:#991b1b;">기능 1. 상습 불법주차 데이터 지도</strong>
+            <p style="margin-top:6px;color:#475569;">
+              소화전, 횡단보도, 어린이보호구역 등 불법주차가 반복되는 지점을 데이터와 시민 제보로 시각화합니다.
+            </p>
+          </div>
+          <div class="safety-card" style="background:#ecfdf5;border-color:#a7f3d0;">
+            <strong style="color:#065f46;">기능 2. 안심 대안 주차장 안내</strong>
+            <p style="margin-top:6px;color:#475569;">
+              주차할 곳이 없을 때 도보 2~5분 거리의 공영·무료 개방 주차장과 감면 요금을 즉각 연결합니다.
+            </p>
+          </div>
+        </div>
+
+        <div class="impact-dark-box">
+          <div style="font-size:11px;font-weight:700;color:#34d399;margin-bottom:6px;">
+            ✓ 이웃과 사회에 가져올 긍정적인 변화
+          </div>
+          <p style="font-size:14px;font-weight:600;">
+            "사람들이 불법주차 때문에 받는 스트레스를 조금이라도 줄일 수 있을 거 같다."
+          </p>
+          <div class="impact-stat-grid">
+            <div>
+              <div style="font-size:18px;font-weight:900;color:#fbbf24;">정보 연결</div>
+              <div style="font-size:11px;color:#94a3b8;">주차 탐색 스트레스 완화</div>
+            </div>
+            <div>
+              <div style="font-size:18px;font-weight:900;color:#34d399;">2~5분</div>
+              <div style="font-size:11px;color:#94a3b8;">도보권 대안 주차 안내</div>
+            </div>
+            <div>
+              <div style="font-size:18px;font-weight:900;color:#38bdf8;">골든타임</div>
+              <div style="font-size:11px;color:#94a3b8;">소방차·구급차 통로 확보</div>
+            </div>
+          </div>
+        </div>
+
+        <div style="display:flex;justify-content:flex-end;">
+          <button
+            type="button"
+            data-close-modal="impactModal"
+            style="background:#0f172a;color:#fff;padding:10px 20px;border-radius:10px;font-size:12px;font-weight:700;"
+          >
+            확인하고 지도 이용하기
+          </button>
+        </div>
+      </div>
+    </div>
+
+    <!-- 모달 3: 5대 금지구역 기준 -->
+    <div id="safetyModal" class="modal-backdrop hidden" role="dialog" aria-modal="true">
+      <div class="modal-box">
+        <button type="button" class="modal-close" data-close-modal="safetyModal">✕</button>
+        <h3 class="modal-title">⚠️ 5대 불법 주정차 절대 금지구역 &amp; 과태료 기준</h3>
+        <p class="modal-sub" style="margin-bottom:14px;">
+          도로교통법 시행령 및 안전신문고 주민신고제 즉시 단속 기준 안내
+        </p>
+
+        <div class="safety-card" style="background:#fef2f2;border-color:#fecaca;">
+          <strong>1. 소화전 5m 이내 (적색 연석 표시)</strong> — 승용 8만원 / 승합 9만원
+          <p style="margin-top:4px;color:#475569;">소방용수 공급 시설 및 비상소화장치 5m 이내 정차 금지.</p>
+        </div>
+        <div class="safety-card" style="background:#fffbeb;border-color:#fde68a;">
+          <strong>2. 어린이보호구역 (스쿨존 정문 출입로)</strong> — 승용 12만원 / 승합 13만원 (3배)
+          <p style="margin-top:4px;color:#475569;">평일 08:00~20:00 초등학교 주 출입문 연결 도로 즉시 단속 대상.</p>
+        </div>
+        <div class="safety-card" style="background:#fff7ed;border-color:#fed7aa;">
+          <strong>3. 횡단보도 위 및 정지선 침범</strong> — 승용 8만원 / 승합 9만원
+          <p style="margin-top:4px;color:#475569;">보행자 횡단보도나 정지선을 침범하여 보행로를 가로막는 행위 금지.</p>
+        </div>
+        <div class="safety-card" style="background:#f8fafc;border-color:#e2e8f0;">
+          <strong>4. 교차로 모퉁이 5m 이내</strong> — 승용 8만원 / 승합 9만원
+          <p style="margin-top:4px;color:#475569;">모퉁이 회전 차량 시야 확보를 위해 가장자리 5m 이내 정차 금지.</p>
+        </div>
+        <div class="safety-card" style="background:#eff6ff;border-color:#bfdbfe;">
+          <strong>5. 버스정류소 10m 이내</strong> — 승용 8만원 / 승합 9만원
+          <p style="margin-top:4px;color:#475569;">버스 정류소 기둥 및 노면 표시 기준 좌우 10m 이내 정차 금지.</p>
+        </div>
+
+        <div style="display:flex;justify-content:flex-end;margin-top:14px;">
+          <button
+            type="button"
+            data-close-modal="safetyModal"
+            style="background:#0f172a;color:#fff;padding:9px 18px;border-radius:10px;font-size:12px;font-weight:700;"
+          >
+            닫기
+          </button>
+        </div>
+      </div>
+    </div>
+  </body>
+</html>
